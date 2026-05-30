@@ -1,0 +1,34 @@
+# ─────────────────────────────────────────────────────────────
+#  JUnit Agent — Configuration
+#  Edit this file. No code changes needed to switch models/providers.
+# ─────────────────────────────────────────────────────────────
+
+provider:
+  # Your API key. For Groq, get one at https://console.groq.com/keys
+  api_key: "PUT_YOUR_GROQ_API_KEY_HERE"
+
+  # OpenAI-compatible endpoint.
+  #   Groq        : https://api.groq.com/openai/v1
+  #   OpenAI      : https://api.openai.com/v1
+  #   OpenRouter  : https://openrouter.ai/api/v1
+  #   Together    : https://api.together.xyz/v1
+  #   Ollama      : http://localhost:11434/v1
+  base_url: "https://api.groq.com/openai/v1"
+
+  # The model that does the reasoning AND the test generation.
+  model: "openai/gpt-oss-120b"
+
+  temperature: 0.3
+  max_tokens: 8192
+
+agent:
+  # Hard safety cap on ReAct loop iterations (prevents runaway loops).
+  max_steps: 80
+  # Print the agent's reasoning and tool calls as it works.
+  verbose: true
+
+project:
+  # Root of the Java project to generate tests for.
+  root: "."
+  # Overwrite tests that already exist?
+  overwrite_existing: false
