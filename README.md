@@ -123,35 +123,6 @@ them. To add a non-OpenAI protocol (e.g. native Anthropic), add one new class in
 
 ---
 
-## Putting it on GitHub
-
-Safe to publish -- **as long as you never commit `config.yaml`** (it holds your
-API key). The included `.gitignore` excludes it, and `config.example.yaml` is
-committed in its place as a template.
-
-```bash
-cd junit-agent
-git init
-git add .
-git commit -m "Initial commit: autonomous JUnit test-generation agent"
-# create an empty repo on github.com first, then:
-git remote add origin https://github.com/<you>/junit-agent.git
-git branch -M main
-git push -u origin main
-```
-
-Before your first push, confirm the key isn't staged:
-
-```bash
-git status                    # config.yaml should NOT appear
-git ls-files | grep config    # should show only config.example.yaml
-```
-
-If you ever commit a key by accident: rotate it immediately in the Groq console
-(removing it in a later commit does NOT remove it from git history).
-
----
-
 ## Config reference (config.yaml)
 
 | Field | Meaning |
