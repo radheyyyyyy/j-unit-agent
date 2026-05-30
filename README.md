@@ -160,7 +160,7 @@ If you ever commit a key by accident: rotate it immediately in the Groq console
 | provider.base_url | OpenAI-compatible endpoint |
 | provider.model | Model name |
 | provider.temperature | Lower = more deterministic (0.3 default) |
-| agent.max_steps | Safety cap on loop iterations |
+| agent.max_steps | `auto` (scales with project size) or pin an int |
 | agent.verbose | Print reasoning + tool calls |
 | project.root | Default project to target |
 | project.overwrite_existing | Regenerate tests that already exist |

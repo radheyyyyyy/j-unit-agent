@@ -30,6 +30,10 @@ the result, then continue. Work methodically, one file at a time.
 WORKFLOW
 1. Call scan_project FIRST to learn the build tool, src_root, test_root, and
    the list of .java files. Remember build_tool, src_root and test_root.
+   If scan_project returns an "error" (e.g. source root not found, or
+   build_tool "unknown"), DO NOT keep calling tools. Stop immediately and
+   tell the user the project root looks wrong and they should pass the correct
+   --project path (the folder containing pom.xml or build.gradle).
 2. For EACH source file, in order:
    a. read_file to get its content.
    b. analyze_class on that content. If "testable" is false, call
@@ -74,7 +78,8 @@ class Orchestrator:
             base_url=prov["base_url"],
             model=prov["model"],
             temperature=prov.get("temperature", 0.3),
-            max_tokens=prov.get("max_tokens", 8192),
+            max_tokens=prov.get("max_tokens", 2048),
+            max_retries=prov.get("max_retries", 4),
         )
 
         self.memory = Memory()
@@ -94,6 +99,21 @@ class Orchestrator:
         reg.register(make_report_progress_tool(self.memory))
         return reg
 
+    def _auto_max_steps(self, root: str) -> int:
+        """
+        Budget the loop automatically from the project size so the developer
+        never has to set max_steps. A cheap filesystem pre-scan (no API call)
+        counts the source files; we allow ~12 steps per file to leave room for
+        the read/analyze/generate/validate/fix cycle, with a sensible floor.
+        """
+        try:
+            from tools import scan_project
+            scan = scan_project.scan_project(root)
+            n = scan.get("java_file_count", 0) if "error" not in scan else 0
+        except Exception:
+            n = 0
+        return max(40, n * 12)
+
     def run(self) -> str:
         proj = self.config["project"]
         agent_cfg = self.config["agent"]
@@ -107,12 +127,25 @@ class Orchestrator:
             + "Begin by scanning the project."
         )
 
+        # max_steps: "auto" (default) computes a budget from the file count.
+        # A power user can still pin an explicit integer in config.
+        configured = agent_cfg.get("max_steps", "auto")
+        if isinstance(configured, int):
+            max_steps = configured
+        else:
+            max_steps = self._auto_max_steps(proj["root"])
+            if agent_cfg.get("verbose", True):
+                print(f"  Auto step budget: {max_steps} "
+                      f"(scales with project size)\n")
+
         loop = ReActLoop(
             provider=self.provider,
             registry=self.registry,
             memory=self.memory,
-            max_steps=agent_cfg.get("max_steps", 80),
+            max_steps=max_steps,
             verbose=agent_cfg.get("verbose", True),
+            keep_recent=agent_cfg.get("keep_recent", 6),
+            max_old_tool_chars=agent_cfg.get("max_old_tool_chars", 600),
         )
 
         final = loop.run(system_prompt=SYSTEM_PROMPT, goal=goal)

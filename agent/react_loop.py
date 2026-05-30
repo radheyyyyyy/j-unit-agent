@@ -36,16 +36,54 @@ class ReActLoop:
         memory: Memory,
         max_steps: int = 80,
         verbose: bool = True,
+        keep_recent: int = 6,
+        max_old_tool_chars: int = 600,
     ):
         self.provider = provider
         self.registry = registry
         self.memory = memory
         self.max_steps = max_steps
         self.verbose = verbose
+        # Context-window management (keeps requests under the TPM limit)
+        self.keep_recent = keep_recent
+        self.max_old_tool_chars = max_old_tool_chars
 
     def _say(self, text: str) -> None:
         if self.verbose:
             print(text)
+
+    def _build_messages(self) -> list[dict]:
+        """
+        Build the message list to send, keeping it under the token budget.
+
+        Strategy: always keep the system prompt (index 0) and the user goal
+        (index 1) in full. For older messages, truncate large tool results —
+        the agent has already acted on them, so it doesn't need the full file
+        content re-sent on every subsequent call. Recent messages stay intact
+        so the agent retains immediate context.
+        """
+        msgs = self.memory.messages
+        if len(msgs) <= 2:
+            return msgs
+
+        keep_recent = self.keep_recent
+        head = msgs[:2]                      # system + goal, always full
+        body = msgs[2:-keep_recent] if len(msgs) > 2 + keep_recent else []
+        tail = msgs[-keep_recent:] if len(msgs) > 2 else []
+
+        trimmed_body = []
+        for m in body:
+            # Only old tool results get truncated; assistant/user turns stay.
+            if m.get("role") == "tool" and len(m.get("content", "")) > self.max_old_tool_chars:
+                short = m["content"][: self.max_old_tool_chars]
+                trimmed_body.append({
+                    **m,
+                    "content": short + f'\n…[truncated; {len(m["content"])} chars total]',
+                })
+            else:
+                trimmed_body.append(m)
+
+        return head + trimmed_body + tail
 
     def run(self, system_prompt: str, goal: str) -> str:
         self.memory.add_message({"role": "system", "content": system_prompt})
@@ -56,7 +94,7 @@ class ReActLoop:
         for step in range(1, self.max_steps + 1):
             self._say(f"{C.DIM}── step {step}/{self.max_steps} ──{C.END}")
 
-            response = self.provider.chat(messages=self.memory.messages, tools=tools)
+            response = self.provider.chat(messages=self._build_messages(), tools=tools)
 
             # --- Case 1: agent is reasoning out loud (text, no tools) => done ---
             if not response.wants_tools:

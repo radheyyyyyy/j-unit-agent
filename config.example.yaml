@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────────────
 #  JUnit Agent — Configuration
-#  Edit this file. No code changes needed to switch models/providers.
+#  Copy this to config.yaml and add your key. No code changes needed.
 # ─────────────────────────────────────────────────────────────
 
 provider:
@@ -11,24 +11,41 @@ provider:
   #   Groq        : https://api.groq.com/openai/v1
   #   OpenAI      : https://api.openai.com/v1
   #   OpenRouter  : https://openrouter.ai/api/v1
-  #   Together    : https://api.together.xyz/v1
   #   Ollama      : http://localhost:11434/v1
   base_url: "https://api.groq.com/openai/v1"
 
-  # The model that does the reasoning AND the test generation.
-  model: "openai/gpt-oss-120b"
+  # Model. On Groq's FREE tier prefer a lighter model:
+  #   llama-3.3-70b-versatile   ← good default
+  #   openai/gpt-oss-20b        ← lighter
+  #   openai/gpt-oss-120b       ← heavy; may exceed free-tier limit
+  model: "llama-3.3-70b-versatile"
 
   temperature: 0.3
-  max_tokens: 8192
+
+  # Max tokens reserved for each response. Groq counts this against your
+  # per-minute limit, so keep it modest on the free tier. 3072 fits a
+  # typical test class; raise it on a paid tier.
+  max_tokens: 3072
+
+  # Automatic retries with backoff when the API rate-limits you.
+  max_retries: 4
 
 agent:
-  # Hard safety cap on ReAct loop iterations (prevents runaway loops).
-  max_steps: 80
-  # Print the agent's reasoning and tool calls as it works.
+  # Step budget for the reasoning loop.
+  #   "auto"  → computed automatically from the number of source files
+  #             (you never need to touch this)
+  #   <int>   → pin an explicit ceiling if you really want to
+  max_steps: auto
+
   verbose: true
 
+  # Context management — keeps each request small enough to stay under
+  # token limits. You normally don't need to change these.
+  keep_recent: 6
+  max_old_tool_chars: 600
+
 project:
-  # Root of the Java project to generate tests for.
+  # Default project root. Usually you pass --project on the command line
+  # instead of setting this.
   root: "."
-  # Overwrite tests that already exist?
   overwrite_existing: false

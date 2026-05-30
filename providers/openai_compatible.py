@@ -7,9 +7,11 @@ Only the base_url + api_key + model change — never this code.
 """
 
 import json
+import re
+import time
 from typing import Optional
 
-from openai import OpenAI
+from openai import OpenAI, RateLimitError, APIStatusError
 
 from .base import LLMProvider, LLMResponse, ToolCall
 
@@ -21,12 +23,14 @@ class OpenAICompatibleProvider(LLMProvider):
         base_url: str,
         model: str,
         temperature: float = 0.3,
-        max_tokens: int = 8192,
+        max_tokens: int = 2048,
+        max_retries: int = 4,
     ):
         self.client = OpenAI(api_key=api_key, base_url=base_url)
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.max_retries = max_retries
 
     def chat(
         self,
@@ -43,7 +47,7 @@ class OpenAICompatibleProvider(LLMProvider):
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
 
-        completion = self.client.chat.completions.create(**kwargs)
+        completion = self._create_with_retry(kwargs)
         choice = completion.choices[0]
         msg = choice.message
 
@@ -63,3 +67,38 @@ class OpenAICompatibleProvider(LLMProvider):
             tool_calls=tool_calls,
             finish_reason=choice.finish_reason,
         )
+
+    def _create_with_retry(self, kwargs: dict):
+        """
+        Call the API, retrying on rate-limit errors with backoff.
+
+        Groq returns 429 (RateLimitError) and sometimes 413 for TPM limits.
+        The message often contains 'try again in 4.2s' — we honor that when
+        present, otherwise use exponential backoff.
+        """
+        delay = 2.0
+        last_err = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                return self.client.chat.completions.create(**kwargs)
+            except (RateLimitError, APIStatusError) as e:
+                last_err = e
+                status = getattr(e, "status_code", None)
+                # Only retry rate-limit style errors; re-raise everything else.
+                if status not in (429, 413):
+                    raise
+                if attempt == self.max_retries:
+                    break
+                wait = self._suggested_wait(str(e)) or delay
+                print(f"  ⏳ rate limited; waiting {wait:.1f}s "
+                      f"(attempt {attempt + 1}/{self.max_retries})")
+                time.sleep(wait)
+                delay = min(delay * 2, 30)
+        raise last_err
+
+    @staticmethod
+    def _suggested_wait(message: str) -> Optional[float]:
+        m = re.search(r'try again in ([\d.]+)\s*s', message)
+        if m:
+            return float(m.group(1)) + 0.5
+        return None
