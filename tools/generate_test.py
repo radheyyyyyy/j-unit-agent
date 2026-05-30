@@ -83,10 +83,14 @@ def make_generate_test_tool(provider: LLMProvider) -> Tool:
         source: str,
         package: str = "",
         class_name: str = "",
-        is_spring: bool = False,
+        is_spring=False,
         error_feedback: str = "",
         previous_code: str = "",
     ) -> dict:
+        # Open models sometimes send booleans as strings ("true"/"false").
+        # Coerce defensively so a sloppy type doesn't break generation.
+        if isinstance(is_spring, str):
+            is_spring = is_spring.strip().lower() in ("true", "1", "yes")
         # Self-correction mode: a previous attempt failed, fix it using the errors
         if error_feedback and previous_code:
             prompt = _FIX_PROMPT.format(

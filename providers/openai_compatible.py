@@ -11,7 +11,7 @@ import re
 import time
 from typing import Optional
 
-from openai import OpenAI, RateLimitError, APIStatusError
+from openai import OpenAI, RateLimitError, APIStatusError, BadRequestError
 
 from .base import LLMProvider, LLMResponse, ToolCall
 
@@ -47,7 +47,28 @@ class OpenAICompatibleProvider(LLMProvider):
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
 
-        completion = self._create_with_retry(kwargs)
+        try:
+            completion = self._create_with_retry(kwargs)
+        except BadRequestError as e:
+            # Open models (Llama etc.) sometimes emit a tool call that fails
+            # the API's schema validation (e.g. boolean sent as the string
+            # "true"). Rather than crash, hand the error back to the model so
+            # it can correct itself on the next turn.
+            detail = str(e)
+            if "tool_use_failed" in detail or "did not match schema" in detail:
+                return LLMResponse(
+                    content=(
+                        "Your previous tool call was rejected because the "
+                        "arguments did not match the tool's schema. Check the "
+                        "parameter types carefully — booleans must be true/false "
+                        "(not the strings \"true\"/\"false\"), numbers must be "
+                        "unquoted — and call the tool again correctly."
+                    ),
+                    tool_calls=[],
+                    finish_reason="invalid_tool_call",
+                )
+            raise
+
         choice = completion.choices[0]
         msg = choice.message
 

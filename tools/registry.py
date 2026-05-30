@@ -44,6 +44,33 @@ class ToolRegistry:
     def names(self) -> list[str]:
         return list(self._tools.keys())
 
+    def _coerce_arguments(self, tool: "Tool", arguments: dict[str, Any]) -> dict[str, Any]:
+        """
+        Open models sometimes send wrong JSON types (boolean as "true",
+        number as "5"). Coerce arguments to the types declared in the tool's
+        schema so a sloppy type doesn't crash the call.
+        """
+        props = tool.parameters.get("properties", {})
+        out = dict(arguments)
+        for key, spec in props.items():
+            if key not in out or out[key] is None:
+                continue
+            expected = spec.get("type")
+            val = out[key]
+            if expected == "boolean" and isinstance(val, str):
+                out[key] = val.strip().lower() in ("true", "1", "yes")
+            elif expected == "integer" and isinstance(val, str):
+                try:
+                    out[key] = int(val.strip())
+                except ValueError:
+                    pass
+            elif expected == "number" and isinstance(val, str):
+                try:
+                    out[key] = float(val.strip())
+                except ValueError:
+                    pass
+        return out
+
     def execute(self, name: str, arguments: dict[str, Any]) -> str:
         """
         Run a tool by name. Always returns a STRING (JSON) so it can be fed
@@ -55,7 +82,8 @@ class ToolRegistry:
             return json.dumps({"error": f"Unknown tool: {name}"})
 
         try:
-            result = tool.func(**arguments)
+            args = self._coerce_arguments(tool, arguments)
+            result = tool.func(**args)
             return json.dumps(result, default=str)
         except TypeError as e:
             return json.dumps({

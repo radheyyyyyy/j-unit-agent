@@ -68,87 +68,6 @@ That's it. The agent scans the project, generates tests, validates each one,
 self-corrects failures, and prints a summary.
 
 ---
-## Getting Started
-
-An autonomous agent that generates and self-validates JUnit 5 + Mockito tests
-for any Java project. Follow these steps to use it on your own project.
-
-### Prerequisites
-
-- Python 3.10 or newer
-- A Groq API key (free at https://console.groq.com/keys)
-- Your Java project must use a standard Maven or Gradle layout (`src/main/java/...`)
-- For test validation: Maven (`mvn`) or Gradle (`gradle` / `./gradlew`) installed.
-  Without it, tests are still generated but not compiled/checked.
-
-### 1. Clone the repo
-
-```bash
-git clone https://github.com/radheyyyyyy/j-unit-agent.git
-cd j-unit-agent
-```
-
-### 2. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 3. Add your API key
-
-```bash
-cp config.example.yaml config.yaml
-```
-
-Then open `config.yaml` and paste your Groq key into `provider.api_key`:
-
-```yaml
-provider:
-  api_key: "gsk_your_real_key_here"
-  base_url: "https://api.groq.com/openai/v1"
-  model: "openai/gpt-oss-120b"
-```
-
-> `config.yaml` is gitignored, so your key is never committed.
-
-### 4. Verify the setup
-
-```bash
-python -c "from agent.orchestrator import Orchestrator; print('structure OK')"
-```
-
-If it prints `structure OK`, you're ready.
-
-### 5. Run it on your Java project
-
-```bash
-python main.py --project /full/path/to/your/java-project
-```
-
-Point `--project` at the folder containing your `pom.xml` or `build.gradle`.
-
-The agent will scan the project, generate a test for each testable class,
-compile and run each test, fix any that fail, and print a summary. Generated
-tests are written into your project's `src/test/java/...`.
-
-### Reviewing the results
-
-Generated tests land in your project's test directory. If your project is under
-git, review them before keeping:
-
-```bash
-cd /path/to/your/java-project
-git status      # see the new test files
-git diff        # review generated tests
-```
-
-### Switching models or providers
-
-Edit `config.yaml` only -- no code changes needed. Any OpenAI-compatible
-endpoint works (Groq, OpenAI, OpenRouter, Together, Ollama). See the
-Configuration section for base URLs.
-
----
 
 ## Running on any project
 
@@ -201,6 +120,35 @@ step 12 -> read_file           next file...
 All speak the OpenAI protocol, so the single `OpenAICompatibleProvider` handles
 them. To add a non-OpenAI protocol (e.g. native Anthropic), add one new class in
 `providers/` implementing `LLMProvider` -- nothing else changes.
+
+---
+
+## Putting it on GitHub
+
+Safe to publish -- **as long as you never commit `config.yaml`** (it holds your
+API key). The included `.gitignore` excludes it, and `config.example.yaml` is
+committed in its place as a template.
+
+```bash
+cd junit-agent
+git init
+git add .
+git commit -m "Initial commit: autonomous JUnit test-generation agent"
+# create an empty repo on github.com first, then:
+git remote add origin https://github.com/<you>/junit-agent.git
+git branch -M main
+git push -u origin main
+```
+
+Before your first push, confirm the key isn't staged:
+
+```bash
+git status                    # config.yaml should NOT appear
+git ls-files | grep config    # should show only config.example.yaml
+```
+
+If you ever commit a key by accident: rotate it immediately in the Groq console
+(removing it in a later commit does NOT remove it from git history).
 
 ---
 

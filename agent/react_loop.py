@@ -96,6 +96,14 @@ class ReActLoop:
 
             response = self.provider.chat(messages=self._build_messages(), tools=tools)
 
+            # --- Special case: the model's tool call was malformed and got
+            # bounced by the API. Feed the correction back and loop again
+            # rather than treating it as completion. ---
+            if response.finish_reason == "invalid_tool_call":
+                self._say(f"{C.YELLOW}⚠ malformed tool call; asking model to retry{C.END}")
+                self.memory.add_message({"role": "user", "content": response.content})
+                continue
+
             # --- Case 1: agent is reasoning out loud (text, no tools) => done ---
             if not response.wants_tools:
                 final = response.content or "(no final message)"
